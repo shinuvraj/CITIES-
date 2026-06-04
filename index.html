@@ -1,0 +1,168 @@
+
+```html
+<style>
+  .game-wrap { padding: 1rem 0; font-family: var(--font-sans); }
+  .user-photo { display: block; margin: 0 auto 10px; width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid #1a5276; }
+  .title-bar { background: #1a5276; color: #fff; text-align: center; padding: 10px; font-size: 15px; font-weight: 500; border-radius: var(--border-radius-md) var(--border-radius-md) 0 0; }
+  .subtitle { text-align: center; font-size: 13px; color: var(--color-text-secondary); margin: 8px 0 16px; }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 0 8px; }
+  .col-head { font-weight: 500; font-size: 14px; text-align: center; padding: 8px; background: #2980b9; color: #fff; border-radius: var(--border-radius-md); margin-bottom: 10px; }
+  .drag-item {
+    background: #d6eaf8; color: #154360;
+    border: 1.5px solid #7fb3d3; border-radius: var(--border-radius-md);
+    padding: 9px 14px; margin-bottom: 8px; cursor: grab;
+    font-size: 14px; text-align: center; user-select: none;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  .drag-item:active { cursor: grabbing; opacity: 0.5; }
+  .drag-item.correct { background: #d5f5e3; color: #145a32; border-color: #27ae60; cursor: default; }
+  .drop-zone {
+    border: 2px dashed #7fb3d3; border-radius: var(--border-radius-md);
+    padding: 9px 14px; margin-bottom: 8px; min-height: 42px;
+    font-size: 14px; text-align: center; color: var(--color-text-secondary);
+    background: var(--color-background-secondary);
+    transition: background 0.2s, border-color 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .drop-zone.over { background: #eaf4fb; border-color: #2980b9; }
+  .drop-zone.correct { background: #d5f5e3; border-color: #27ae60; color: #145a32; font-weight: 500; border-style: solid; }
+  .drop-zone.wrong { background: #fdecea; border-color: #e74c3c; }
+  .score-bar { text-align: center; margin-top: 18px; font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+  .reset-btn { display: block; margin: 14px auto 0; padding: 8px 28px; font-size: 14px; border-radius: var(--border-radius-md); cursor: pointer; }
+  .label-sub { font-size: 11px; color: #888; display: block; }
+</style>
+
+<div class="game-wrap">
+  <div class="title-bar">WEALTHY FAMILIES EMERGED IN ITALY</div>
+  <p class="subtitle">Drag each family name to its matching city</p>
+
+  <div class="columns">
+    <div>
+      <div class="col-head">Italian Families</div>
+      <div id="drag-pool"></div>
+    </div>
+    <div>
+      <div class="col-head">Cities</div>
+      <div id="drop-pool"></div>
+    </div>
+  </div>
+
+  <div class="score-bar" id="score-bar"></div>
+  <button class="reset-btn" onclick="init()">↺ Reset</button>
+</div>
+
+<script>
+// Audio context for success sound
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSuccessSound() {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.1);
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.3);
+}
+
+const data = [
+  { family: "Medici", mal: "മെഡിചി", city: "Florence" },
+  { family: "Sforza", mal: "സ്ഫോർസാ", city: "Milan" },
+  { family: "Farnese", mal: "ഫർനീസി", city: "Parma" },
+  { family: "Orsini", mal: "ഓർസിനി", city: "Naples" },
+  { family: "Visconti", mal: "വിസ്കോന്തി", city: "Milan" },
+];
+
+let dragId = null;
+let correct = 0;
+
+function shuffle(arr) {
+  let a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function init() {
+  correct = 0;
+  document.getElementById('score-bar').textContent = '';
+  const pool = document.getElementById('drag-pool');
+  const drops = document.getElementById('drop-pool');
+  pool.innerHTML = '';
+  drops.innerHTML = '';
+
+  const shuffled = shuffle(data);
+  shuffled.forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'drag-item';
+    el.id = 'drag-' + i;
+    el.draggable = true;
+    el.dataset.family = d.family;
+    el.innerHTML = d.family + ' <span class="label-sub">' + d.mal + '</span>';
+    el.addEventListener('dragstart', e => {
+      dragId = d.family;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => el.style.opacity = '0.4', 0);
+    });
+    el.addEventListener('dragend', () => { el.style.opacity = '1'; });
+    pool.appendChild(el);
+  });
+
+  const cityOrder = shuffle(data);
+  cityOrder.forEach((d) => {
+    const zone = document.createElement('div');
+    zone.className = 'drop-zone';
+    zone.dataset.city = d.city;
+    zone.dataset.correct = d.family;
+    zone.textContent = d.city;
+
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (!zone.classList.contains('correct')) zone.classList.add('over');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('over');
+      if (zone.classList.contains('correct')) return;
+      if (dragId === zone.dataset.correct) {
+        zone.classList.add('correct');
+        zone.textContent = zone.dataset.correct + ' → ' + d.city;
+        playSuccessSound(); // Play sound on correct match
+        const dragEl = document.querySelector('[data-family="' + dragId + '"]');
+        if (dragEl) {
+          dragEl.classList.add('correct');
+          dragEl.draggable = false;
+        }
+        correct++;
+        updateScore();
+      } else {
+        zone.classList.add('wrong');
+        setTimeout(() => zone.classList.remove('wrong'), 600);
+      }
+      dragId = null;
+    });
+    drops.appendChild(zone);
+  });
+}
+
+function updateScore() {
+  const bar = document.getElementById('score-bar');
+  if (correct === data.length) {
+    bar.textContent = '🎉 Excellent! All ' + data.length + ' matched correctly!';
+    bar.style.color = '#1a8a4a';
+  } else {
+    bar.textContent = correct + ' / ' + data.length + ' matched';
+  }
+}
+
+init();
+</script>
+
+```
